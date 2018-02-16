@@ -1,0 +1,63 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:		logoverlay
+# Required-Start:	$local_fs
+# Required-Stop:	$local_fs
+# Should-Start:
+# Should-Stop:
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 6
+# Short-Description:	Make /var/log overlay tmpfs
+### END INIT INFO
+
+PATH="/sbin:/bin:/usr/sbin:/usr/bin"
+NAME="logoverlay"
+DESC="Log overlay"
+
+
+if [ -r "/etc/default/${NAME}" ]
+then
+	. "/etc/default/${NAME}"
+fi
+
+. /lib/lsb/init-functions
+
+set -e
+
+case "${1}" in
+	start)
+		if [ -r /tmp/logoverlay.lock ]
+		then
+			exit 0
+		else
+			#prepare layers
+			mkdir -p /var/log.tmpfs
+			mount -t tmpfs -o rw,nosuid,nodev,noexec,relatime,size=512m,mode=0775 tmpfs /var/log.tmpfs
+			mkdir -p /var/log.tmpfs/upper
+			mkdir -p /var/log.tmpfs/work
+			chown -R root:syslog /var/log.tmpfs
+			chmod -R u=rwX,g=rwX,o=rX /var/log.tmpfs
+			#prepare overlay
+			mkdir -p /var/log.overlay
+			chown root:syslog /var/log.overlay
+			chmod u=rwX,g=rwX,o=rX /var/log.overlay
+			#start overlay
+			mount -t overlay -o rw,lowerdir=/var/log,upperdir=/var/log.tmpfs/upper,workdir=/var/log.tmpfs/work overlay /var/log.overlay
+			mount --bind /var/log.overlay /var/log
+			#/usr/sbin/logrotate -f /etc/logrotate.conf
+			touch /tmp/logoverlay.lock
+		fi
+		;;
+
+	stop|restart|reload)
+
+		;;
+
+	*)
+		echo "Usage: ${0} {start|stop|reload}" >&2
+		exit 1
+		;;
+esac
+
+exit 0
